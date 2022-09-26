@@ -5,8 +5,8 @@
 ![Code Diagram](https://github.com/lovettmf/MP1/blob/2174778cff164f7152ab09f2e90a4267c80dfa9d/MP1%20System%20Diagram.png?raw=true)
 
 <h3> The Code Flow: </h3>
-Main function call() -> call readArgs() -> return readArgs() -> create listener server -> launch Client() goroutine -> Infinite loop -> accept messages from other processes -> launch handleConnection() goroutine -> exit when true
-
+Main function call() -> call readArgs() -> return readArgs() -> create listener server -> launch Client() goroutine -> Infinite loop -> 
+accept messages from other processes -> launch handleConnection() goroutine -> exit when true
 
 Client() -> launch waitForMessages() goroutine -> Inifite loop -> accept std_in, if send command launch unicast_send() goroutine. if stop kill program
 
