@@ -7,6 +7,7 @@
 <h3> The Code Flow: </h3>
 Main function call() -> call readArgs() -> return readArgs() -> create listener server -> launch Client() goroutine -> Infinite loop -> accept messages from other processes -> launch handleConnection() goroutine -> exit when true
 
+
 Client() -> launch waitForMessages() goroutine -> Inifite loop -> accept std_in, if send command launch unicast_send() goroutine. if stop kill program
 
 unicast_send() -> dial destination server -> send message to server -> Print confirmation of send -> routine dies
