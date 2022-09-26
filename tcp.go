@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -25,13 +26,13 @@ func unicast_send(destination, message string) {
 	fmt.Println("Sent " + msg[1] + " to process " + destination + ", system time is " + myTime)
 }
 
-func unicast_receive(source net.Addr, message string, m chan string) {
+func unicast_receive(message string, m chan string) {
 	t := time.Now()
 	myTime := t.Format(time.RFC3339) + "\n"
 	m <- message + myTime
 }
 
-func launch_server(PORT string, m chan string) {
+func launch_server(PORT string, m chan string, delays [2]int) {
 
 	l, err := net.Listen("tcp", PORT)
 	if err != nil {
@@ -51,7 +52,9 @@ func launch_server(PORT string, m chan string) {
 			fmt.Println(err)
 			return
 		}
-		unicast_receive(c.LocalAddr(), netData, m)
+		r := rand.Intn(delays[1]) + delays[0]
+		time.Sleep(time.Duration(r) * time.Millisecond)
+		unicast_receive(netData, m)
 	}
 
 }
@@ -102,11 +105,10 @@ func main() {
 	ports, delays, id := readArgs(a)
 
 	m := make(chan string)
-	fmt.Println(delays)
 
 	PORT := ":" + strings.Split(ports[id], ":")[1]
 
-	go launch_server(PORT, m)
+	go launch_server(PORT, m, delays)
 
 	for {
 		reader := bufio.NewReader(os.Stdin)
@@ -121,6 +123,9 @@ func main() {
 			id_s := strconv.Itoa(id + 1)
 
 			message := id_s + "\n" + input[2]
+
+			r := rand.Intn(delays[1]) + delays[0]
+			time.Sleep(time.Duration(r) * time.Millisecond)
 
 			unicast_send(ports[n], message)
 
