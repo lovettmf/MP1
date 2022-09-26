@@ -13,8 +13,10 @@ import (
 
 func readArgs(a []string) (map[int]string, [2]int, int) {
 
+	//Process ID
 	id, _ := strconv.Atoi(a[0])
 
+	//Open and read the config file
 	f, err := os.Open("config.txt")
 
 	if err != nil {
@@ -32,10 +34,12 @@ func readArgs(a []string) (map[int]string, [2]int, int) {
 
 	d := strings.Split(data[0], " ")
 
+	//message delay range
 	var delays [2]int
 	delays[0], _ = strconv.Atoi(d[0])
 	delays[1], _ = strconv.Atoi(d[1])
 
+	//map of ID/port pairs
 	ports := make(map[int]string)
 	for i := 1; i < len(data); i++ {
 		s := strings.Split(data[i], " ")
@@ -47,34 +51,48 @@ func readArgs(a []string) (map[int]string, [2]int, int) {
 }
 
 func unicast_receive(message string, ch chan string) {
+
+	//Time message is receiving by server
 	t := time.Now()
 	myTime := t.Format(time.RFC3339) + "\n"
-	ch <- message + "@@@" + myTime
 
+	//Places message and time in channel for receiving client
+	//"@@@" will be used as a delimiting agent
+	ch <- message + "@@@" + myTime
 }
 
 func handleConnection(c net.Conn, ch chan string) {
+	//Uses code from https://www.linode.com/docs/guides/developing-udp-and-tcp-clients-and-servers-in-go/#create-a-concurrent-tcp-server
+
+	//Handles each incoming TCP connection
 	for {
+		//Get TCP data. Note that anything after the first "\n" character will be disregarded
 		netData, err := bufio.NewReader(c).ReadString('\n')
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
+		//Extract message string
 		temp := strings.TrimSpace(string(netData))
+
 		if temp == "STOP" {
 			break
 		}
 
+		//Calls unicast_receive to deliver the message to a client
 		unicast_receive(temp, ch)
 
 	}
-	c.Close()
+	c.Close() //Ends connection
 }
 
 func client(ports map[int]string, delays [2]int, id int, ch chan string) {
+	//Main client will continuously take input
+	//Launches new routine for each message that needs sending
 
-	go waitForMessages(ch)
+	go waitForMessages(ch) //A routine to monitor for messages from the server
+
 	for {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Print(">> ")
@@ -84,15 +102,17 @@ func client(ports map[int]string, delays [2]int, id int, ch chan string) {
 
 		if strings.ToLower(input[0]) == "send" {
 
-			n, _ := strconv.Atoi(input[1])
-			id_s := strconv.Itoa(id)
+			n, _ := strconv.Atoi(input[1]) //Process ID of destination
+			id_s := strconv.Itoa(id)       //Own process ID
 
+			//The senders process ID is added for future splitting by the recipient
+			//Note use of delimiter @@@ because "\n" cannot be used
 			message := id_s + "@@@" + strings.Join(input[2:], " ")
 
-			//fmt.Println(message)
-
+			//Random delay time
 			r := rand.Intn(delays[1]) + delays[0]
 
+			//Send is handled in its own routine
 			go unicast_send(n, ports[n], message, r)
 
 		} else if strings.TrimSpace(string(text)) == "STOP" { //is this ok
@@ -106,17 +126,26 @@ func client(ports map[int]string, delays [2]int, id int, ch chan string) {
 
 func unicast_send(n int, destination string, message string, r int) {
 
+	//Simulated message send delay
 	time.Sleep(time.Duration(r) * time.Millisecond)
 
+	//Remove trailing newline
 	m := strings.TrimSuffix(message, "\n")
+
+	//Split for use in the print
 	msg := strings.Split(m, "@@@")
+
+	//Opens connection to other server
 	c, err := net.Dial("tcp", destination)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
+	//Outputs message through the connection
 	fmt.Fprintf(c, message+"\n")
 
+	//Time message was sent
 	t := time.Now()
 	myTime := t.Format(time.RFC3339) + "\n"
 
@@ -124,7 +153,7 @@ func unicast_send(n int, destination string, message string, r int) {
 }
 
 func waitForMessages(ch chan string) {
-
+	//Dedicated to checking the channel for messages passed by the server
 	for {
 		out := strings.Split(<-ch, "@@@")
 		fmt.Println("Received " + out[1] + " from process " + out[0] + ", system time is " + out[2])
@@ -139,13 +168,16 @@ func main() {
 	if len(a) == 0 {
 		fmt.Println("Please provide process number")
 		return
-	} //Ensure a process id is provided for
+	} //Ensure a process id is provided
 
 	ports, delays, id := readArgs(a)
-	//it gets here
-	PORT := ":" + strings.Split(ports[id], ":")[1]
-	//Code from https://www.linode.com/docs/guides/developing-udp-and-tcp-clients-and-servers-in-go/#create-a-concurrent-tcp-server
 
+	//Extract port number in format ":XXXXX" for listener
+	PORT := ":" + strings.Split(ports[id], ":")[1]
+
+	//More code from linode.com
+
+	//Start listening on designated port number
 	l, err := net.Listen("tcp", PORT)
 	if err != nil {
 		fmt.Println(err)
@@ -154,11 +186,14 @@ func main() {
 
 	defer l.Close()
 
+	//Create a channel for use between client and server
 	ch := make(chan string)
+
+	//Launch client routine
 	go client(ports, delays, id, ch) //will start first client
 
+	//Infinitely accept incoming connections and launch individual routines to handle each one.
 	for {
-
 		c, err := l.Accept()
 		if err != nil {
 			fmt.Println(err)
