@@ -11,25 +11,46 @@ import (
 	"time"
 )
 
-func unicast_send(destination, message string) {
-	msg := strings.Split(message, "\n")
+func unicast_send(destination, message string, id string, random int) {
 	c, err := net.Dial("tcp", destination)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Fprintf(c, message+"\n")
+	fmt.Println("Time to sleep!")
+	time.Sleep(time.Duration(random) * time.Millisecond)
+	fmt.Println("I'm Awake!")
+
+	fmt.Fprintf(c, id+"|"+message+"\n")
 
 	t := time.Now()
 	myTime := t.Format(time.RFC3339) + "\n"
 
-	fmt.Println("Sent " + msg[1] + " to process " + destination + ", system time is " + myTime)
+	fmt.Println("Sent " + message + " to " + destination + ", system time is " + myTime)
+	c.Close()
 }
 
-func unicast_receive(message string, m chan string) {
+func unicast_receive(source net.Conn, message chan string, delays [2]int) {
+	r := rand.Intn(delays[1]) + delays[0]
+	fmt.Println("Time to sleep")
+	time.Sleep(time.Duration(r) * time.Millisecond)
+	fmt.Println("I'm Awake!")
+
+	netData, err := bufio.NewReader(source).ReadString('\n')
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
 	t := time.Now()
 	myTime := t.Format(time.RFC3339) + "\n"
-	m <- message + myTime
+
+	temp := strings.Split(netData, "|")
+
+	message <- strings.TrimSuffix(temp[1], "\n")
+	message <- temp[0]
+	message <- myTime
+
 }
 
 func launch_server(PORT string, m chan string, delays [2]int) {
@@ -42,19 +63,14 @@ func launch_server(PORT string, m chan string, delays [2]int) {
 	defer l.Close()
 
 	for {
+		//fmt.Println("Checkpoint 1")
 		c, err := l.Accept()
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		netData, err := bufio.NewReader(c).ReadString('\n')
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		r := rand.Intn(delays[1]) + delays[0]
-		time.Sleep(time.Duration(r) * time.Millisecond)
-		unicast_receive(netData, m)
+		unicast_receive(c, m, delays)
+
 	}
 
 }
@@ -104,15 +120,17 @@ func main() {
 
 	ports, delays, id := readArgs(a)
 
-	m := make(chan string)
+	m := make(chan string, 3)
 
 	PORT := ":" + strings.Split(ports[id], ":")[1]
 
 	go launch_server(PORT, m, delays)
 
 	for {
+		fmt.Println("Waiting for input")
+
 		reader := bufio.NewReader(os.Stdin)
-		fmt.Print(">> ")
+
 		text, _ := reader.ReadString('\n')
 
 		input := strings.Split(text, " ")
@@ -120,23 +138,26 @@ func main() {
 		if strings.ToLower(input[0]) == "send" {
 
 			n, _ := strconv.Atoi(input[1])
-			id_s := strconv.Itoa(id + 1)
+			id_s := strconv.Itoa(id)
 
-			message := id_s + "\n" + input[2]
+			message := strings.TrimSuffix(strings.Join(input[2:], " "), "\n")
 
 			r := rand.Intn(delays[1]) + delays[0]
-			time.Sleep(time.Duration(r) * time.Millisecond)
 
-			unicast_send(ports[n], message)
+			go unicast_send(ports[n], message, id_s, r)
 
-		} else if strings.TrimSpace(string(text)) == "STOP" {
+		} else if strings.TrimSpace(input[0]) == "STOP" {
 			fmt.Println("TCP client exiting...")
 			return
 		}
-		if len(m) != 0 {
-			out := strings.Split(<-m, "\n")
 
-			fmt.Println("Received " + out[1] + " to process " + out[0] + ", system time is " + out[2])
+		fmt.Println("Waiting to receive")
+		if len(m) == 3 {
+			msg := <-m
+			src := <-m
+			t := <-m
+
+			fmt.Println("Received " + msg + " from Process " + src + ", system time is " + t)
 		}
 
 	}
