@@ -19,7 +19,7 @@ waitForMessages() -> Infinite loop -> Waits for message in channel -> Prints mes
 Process creation:
 ./go run tcp1.go [1/2/3/4]
 
-To send a message
+To send a message:
 send [Process ID] [message]
 
 To kill a process:
