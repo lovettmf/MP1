@@ -87,7 +87,7 @@ func handleConnection(c net.Conn, ch chan string) {
 	c.Close() //Ends connection
 }
 
-func client(ports map[int]string, delays [2]int, id int, ch chan string) {
+func client(addresses map[int]string, delays [2]int, id int, ch chan string, exit chan bool) {
 	//Main client will continuously take input
 	//Launches new routine for each message that needs sending
 
@@ -113,11 +113,14 @@ func client(ports map[int]string, delays [2]int, id int, ch chan string) {
 			r := rand.Intn(delays[1]) + delays[0]
 
 			//Send is handled in its own routine
-			go unicast_send(n, ports[n], message, r)
+			go unicast_send(n, addresses[n], message, r)
 
-		} else if strings.TrimSpace(string(text)) == "STOP" { //is this ok
+		} else if strings.TrimSpace(string(text)) == "STOP" { //Check if the STOP command is being called
 			fmt.Println("TCP client exiting...")
-			return
+			exit <- true
+
+			unicast_send(id, addresses[id], text, 0) //Send connection back to server to force iteration through the main for loop
+
 		}
 
 	}
@@ -130,10 +133,10 @@ func unicast_send(n int, destination string, message string, r int) {
 	time.Sleep(time.Duration(r) * time.Millisecond)
 
 	//Remove trailing newline
-	m := strings.TrimSuffix(message, "\n")
+	temp := strings.TrimSuffix(message, "\n")
 
 	//Split for use in the print
-	msg := strings.Split(m, "@@@")
+	msg := strings.Split(temp, "@@@")
 
 	//Opens connection to other server
 	c, err := net.Dial("tcp", destination)
@@ -170,10 +173,10 @@ func main() {
 		return
 	} //Ensure a process id is provided
 
-	ports, delays, id := readArgs(a)
+	addresses, delays, id := readArgs(a) //Create map of process ID:"IPaddress:port", array of [min, max] delay, and current process ID
 
 	//Extract port number in format ":XXXXX" for listener
-	PORT := ":" + strings.Split(ports[id], ":")[1]
+	PORT := ":" + strings.Split(addresses[id], ":")[1]
 
 	//More code from linode.com
 
@@ -189,8 +192,11 @@ func main() {
 	//Create a channel for use between client and server
 	ch := make(chan string)
 
+	//Create a channel to exit the program when STOP is called
+	exit := make(chan bool, 1)
+
 	//Launch client routine
-	go client(ports, delays, id, ch) //will start first client
+	go client(addresses, delays, id, ch, exit) //will start first client
 
 	//Infinitely accept incoming connections and launch individual routines to handle each one.
 	for {
@@ -200,5 +206,9 @@ func main() {
 			return
 		}
 		go handleConnection(c, ch)
+		if <-exit { //If the exit call is filled with true, the loop ends
+			return
+		}
+
 	}
 }
