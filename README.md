@@ -36,3 +36,6 @@ Any commands typed into the standard input without either of those two commands 
 <br/>
 <br/>
 Sending a message to an incorrect PID will result in a missing address but the program will continue to run.
+<br/>
+<br/>
+Having dedicated routines for sending messages but only one for receiving presents a possible bottleneck. However the blocking writes to the channel do not disrupt the ability to send more messages. 
